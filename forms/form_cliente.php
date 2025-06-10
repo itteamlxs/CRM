@@ -10,7 +10,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../config/database.php';
 
-requireRole(['administrador', 'vendedor']);
+requireRole(['admin', 'vendedor']);
 
 $pdo = getPDO();
 
@@ -63,7 +63,7 @@ require_once __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </h1>
 
-        <form method="POST" action="/forms/procesar_cliente.php" novalidate class="space-y-4">
+        <form method="POST" action="<?php echo url('forms/procesar_cliente.php'); ?>" novalidate class="space-y-4">
             <!-- Token CSRF -->
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token, ENT_QUOTES, 'UTF-8'); ?>">
             
@@ -159,7 +159,7 @@ require_once __DIR__ . '/../includes/header.php';
             <!-- Botones -->
             <div class="flex justify-end space-x-4 pt-4">
                 <a 
-                    href="/pages/clientes/index.php" 
+                    href="<?php echo url('pages/clientes/index.php'); ?>" 
                     class="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
                 >
                     <?php echo htmlspecialchars($lang['cancel'] ?? 'Cancelar', ENT_QUOTES, 'UTF-8'); ?>

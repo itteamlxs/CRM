@@ -12,7 +12,7 @@ require_once __DIR__ . '/../../includes/csrf.php';
 require_once __DIR__ . '/../../lang/' . ($_SESSION['lang'] ?? 'es') . '.php';
 
 // Solo administradores y vendedores pueden acceder
-require_role(['administrador', 'vendedor']);
+require_role(['admin', 'vendedor']);
 
 $pdo = getPDO();
 

@@ -12,18 +12,18 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../config/database.php';
 
-requireRole(['administrador', 'vendedor']);
+requireRole(['admin', 'vendedor']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    header('Location: /pages/clientes/index.php?error=method');
+    header('Location: ' . url('pages/clientes/index.php?error=method'));
     exit;
 }
 
 // Validar token CSRF
 $token = $_POST['csrf_token'] ?? '';
 if (!validate_csrf_token($token)) {
-    header('Location: /pages/clientes/index.php?error=csrf');
+    header('Location: ' . url('pages/clientes/index.php?error=csrf'));
     exit;
 }
 
@@ -61,7 +61,7 @@ if (!in_array($estado, ['activo', 'inactivo'], true)) {
 // Si hay errores, redirigir con mensaje
 if ($errors) {
     $errorMsg = implode(' ', $errors);
-    header('Location: /forms/form_cliente.php' . ($id ? "?id=$id" : '') . '&error=' . urlencode($errorMsg));
+    header('Location: ' . url('forms/form_cliente.php') . ($id ? "?id=$id" : '') . '&error=' . urlencode($errorMsg));
     exit;
 }
 
@@ -78,7 +78,7 @@ try {
     $emailStmt->execute();
     
     if ($emailStmt->fetch()) {
-        header('Location: /forms/form_cliente.php' . ($id ? "?id=$id" : '') . '&error=' . urlencode('El email ya está registrado por otro cliente.'));
+        header('Location: ' . url('forms/form_cliente.php') . ($id ? "?id=$id" : '') . '&error=' . urlencode('El email ya está registrado por otro cliente.'));
         exit;
     }
     
@@ -124,7 +124,7 @@ try {
 
     // Redirigir con mensaje de éxito
     $mensaje = $accion === 'crear' ? 'Cliente creado correctamente' : 'Cliente actualizado correctamente';
-    header("Location: /pages/clientes/index.php?success=" . urlencode($mensaje));
+    header('Location: ' . url('pages/clientes/index.php?success=') . urlencode($mensaje));
     exit;
 
 } catch (PDOException $e) {
@@ -140,7 +140,7 @@ try {
         $errorMsg = 'El email ya está registrado por otro cliente.';
     }
     
-    header('Location: /forms/form_cliente.php' . ($id ? "?id=$id" : '') . '&error=' . urlencode($errorMsg));
+    header('Location: ' . url('forms/form_cliente.php') . ($id ? "?id=$id" : '') . '&error=' . urlencode($errorMsg));
     exit;
     
 } catch (Exception $e) {
@@ -149,6 +149,6 @@ try {
     }
     
     error_log("Error general al guardar cliente: " . $e->getMessage());
-    header('Location: /forms/form_cliente.php' . ($id ? "?id=$id" : '') . '&error=' . urlencode('Error inesperado al guardar cliente.'));
+    header('Location: ' . url('forms/form_cliente.php') . ($id ? "?id=$id" : '') . '&error=' . urlencode('Error inesperado al guardar cliente.'));
     exit;
 }

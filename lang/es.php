@@ -200,7 +200,7 @@ return [
     'confirm_password' => 'Confirmar Contraseña',
     'full_name' => 'Nombre Completo',
     'role' => 'Rol',
-    'role_admin' => 'Administrador',
+    'role_admin' => 'Admin',
     'role_seller' => 'Vendedor',
     'user_created' => 'Usuario creado correctamente',
     'user_updated' => 'Usuario actualizado correctamente',

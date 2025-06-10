@@ -21,8 +21,8 @@ header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('X-Content-Type-Options: nosniff');
 
-// Definir roles para el sistema
-define('ROLE_ADMIN', 'administrador');
+// Definir roles para el sistema (CORREGIDOS para coincidir con BD)
+define('ROLE_ADMIN', 'admin');
 define('ROLE_SELLER', 'vendedor');
 
 // Definir expiración de sesión en segundos (ejemplo: 30 minutos)

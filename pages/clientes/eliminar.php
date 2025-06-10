@@ -9,7 +9,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/csrf.php';
 require_once __DIR__ . '/../../config/database.php';
 
-require_role(['administrador']); // Solo admin puede eliminar clientes
+require_role(['admin']); // Solo admin puede eliminar clientes
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);

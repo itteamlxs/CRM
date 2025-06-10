@@ -9,6 +9,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/functions.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -74,7 +76,7 @@ function logoutUser(): void
 function requireLogin(): void
 {
     if (!isSessionActive()) {
-        header('Location: /pages/login.php?timeout=1');
+        header('Location: ' . url('pages/login.php?timeout=1'));
         exit;
     }
 }

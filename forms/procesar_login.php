@@ -19,14 +19,14 @@ if (session_status() === PHP_SESSION_NONE) {
 // Solo procesar POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    header('Location: /pages/login.php?error=method');
+    header('Location: ' . url('pages/login.php?error=method'));
     exit;
 }
 
 // Validar token CSRF
 $token = $_POST['csrf_token'] ?? '';
 if (!validate_csrf_token($token)) {
-    header('Location: /pages/login.php?error=csrf');
+    header('Location: ' . url('pages/login.php?error=csrf'));
     exit;
 }
 
@@ -45,7 +45,7 @@ if ($password === '' || mb_strlen($password) > 255) {
 }
 
 if ($errors) {
-    header('Location: /pages/login.php?error=validation');
+    header('Location: ' . url('pages/login.php?error=validation'));
     exit;
 }
 
@@ -67,7 +67,7 @@ try {
         // Esperar un poco para prevenir ataques de fuerza bruta
         sleep(1);
         
-        header('Location: /pages/login.php?error=credentials');
+        header('Location: ' . url('pages/login.php?error=credentials'));
         exit;
     }
     
@@ -94,15 +94,15 @@ try {
     }
     
     // Redirigir al dashboard
-    header('Location: /pages/dashboard.php');
+    header('Location: ' . url('pages/dashboard.php'));
     exit;
     
 } catch (PDOException $e) {
     error_log("Error en base de datos durante login: " . $e->getMessage());
-    header('Location: /pages/login.php?error=database');
+    header('Location: ' . url('pages/login.php?error=database'));
     exit;
 } catch (Exception $e) {
     error_log("Error general durante login: " . $e->getMessage());
-    header('Location: /pages/login.php?error=general');
+    header('Location: ' . url('pages/login.php?error=general'));
     exit;
 }

@@ -7,6 +7,7 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../config/globals.php';
 
@@ -16,7 +17,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Si ya está logueado, redirigir
 if (isset($_SESSION['user_id'])) {
-    header('Location: /pages/dashboard.php');
+    header('Location: ' . url('pages/dashboard.php'));
     exit;
 }
 
@@ -37,7 +38,7 @@ $csrf_token = generateCsrfToken();
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <form action="/forms/procesar_login.php" method="POST" class="bg-white p-8 rounded shadow-md w-full max-w-sm">
+    <form action="<?php echo url('forms/procesar_login.php'); ?>" method="POST" class="bg-white p-8 rounded shadow-md w-full max-w-sm">
         <h2 class="text-xl mb-6"><?php echo htmlspecialchars($lang['login_title'], ENT_QUOTES, 'UTF-8'); ?></h2>
 
         <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>" />

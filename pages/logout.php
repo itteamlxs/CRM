@@ -6,6 +6,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../includes/functions.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -13,5 +15,5 @@ if (session_status() === PHP_SESSION_NONE) {
 session_unset();
 session_destroy();
 
-header('Location: /pages/login.php');
+header('Location: ' . url('pages/login.php'));
 exit;

@@ -111,3 +111,54 @@ function validate_csrf_token(?string $token): bool
     }
     return hash_equals($_SESSION['csrf_token'], $token);
 }
+
+/**
+ * Obtener la URL base del proyecto automáticamente
+ * Detecta si está en subdirectorio o raíz
+ * @return string Base URL sin barra final
+ */
+function getBaseUrl(): string
+{
+    static $baseUrl = null;
+    
+    if ($baseUrl === null) {
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $requestUri = $_SERVER['REQUEST_URI'] ?? '';
+        
+        // Buscar la ruta del proyecto detectando where están los archivos
+        $scriptDir = dirname($scriptName);
+        
+        // Si el script está en subdirectorios (como /forms/ o /pages/), subir hasta encontrar la raíz
+        $pathParts = explode('/', trim($scriptDir, '/'));
+        $baseParts = [];
+        
+        // Buscar hasta encontrar la raíz del proyecto (donde están las carpetas principales)
+        foreach ($pathParts as $part) {
+            if (in_array($part, ['forms', 'pages', 'includes', 'lang', 'config', 'assets'])) {
+                break;
+            }
+            if ($part !== '') {
+                $baseParts[] = $part;
+            }
+        }
+        
+        $baseUrl = '/' . implode('/', $baseParts);
+        if ($baseUrl === '/') {
+            $baseUrl = '';
+        }
+    }
+    
+    return $baseUrl;
+}
+
+/**
+ * Generar URL completa para el proyecto
+ * @param string $path Ruta relativa (ej: 'pages/dashboard.php')
+ * @return string URL completa
+ */
+function url(string $path): string
+{
+    $base = getBaseUrl();
+    $path = ltrim($path, '/');
+    return $base . '/' . $path;
+}
