@@ -1,0 +1,44 @@
+# Archivos de sistema y OS
+.DS_Store
+Thumbs.db
+
+# Archivos de entorno
+/config/.env
+
+# Logs y caché
+/logs/
+/tmp/
+/cache/
+
+# Archivos generados por IDEs
+/.vscode/
+/.idea/
+/*.iml
+
+# Archivos de sesión PHP
+/sessions/
+
+# Archivos de subida temporal (si los usas)
+/uploads/tmp/
+/uploads/cache/
+
+# Dependencias (no usas composer pero por si acaso)
+/vendor/
+
+# Archivos de bases de datos locales
+*.sqlite
+*.db
+
+# Archivos de respaldo o temporales
+*~
+*.bak
+*.old
+
+# Archivos de Tailwind CSS generados si haces build local
+/assets/css/*.css
+/assets/css/*.map
+
+# Otros archivos específicos de tu entorno local
+xampp/
+laragon/
+
