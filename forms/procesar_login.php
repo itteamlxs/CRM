@@ -1,103 +1,108 @@
 <?php
 /**
- * Archivo: forms/procesar_cliente.php
- * Función: Inserta o actualiza clientes en la base de datos.
- * Seguridad: CSRF, PDO con consultas preparadas, validación y sanitización.
- * Requiere: Sesión activa, rol administrador o vendedor.
+ * Archivo: forms/procesar_login.php
+ * Función: Procesa autenticación de usuarios del sistema.
+ * Seguridad: CSRF, validación, sanitización, password_verify, sesión segura.
+ * No requiere: Sesión previa (es el login).
  */
 
-require_once __DIR__ . '/../includes/auth.php';
+declare(strict_types=1);
+
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-require_role(['administrador', 'vendedor']);
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
+// Solo procesar POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    exit('Método no permitido');
+    header('Location: /pages/login.php?error=method');
+    exit;
 }
 
 // Validar token CSRF
 $token = $_POST['csrf_token'] ?? '';
 if (!validate_csrf_token($token)) {
-    exit('Token CSRF inválido');
-}
-
-// Sanear y validar inputs
-$id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
-$nombre = trim($_POST['nombre'] ?? '');
-$email = trim($_POST['email'] ?? '');
-$telefono = trim($_POST['telefono'] ?? '');
-$direccion = trim($_POST['direccion'] ?? '');
-$estado = $_POST['estado'] ?? 'activo';
-
-$errores = [];
-
-if ($nombre === '' || mb_strlen($nombre) > 100) {
-    $errores[] = 'El nombre es obligatorio y debe tener menos de 100 caracteres.';
-}
-
-if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 100) {
-    $errores[] = 'El email es obligatorio y debe ser válido con menos de 100 caracteres.';
-}
-
-if ($telefono !== '' && mb_strlen($telefono) > 20) {
-    $errores[] = 'El teléfono debe tener menos de 20 caracteres.';
-}
-
-if (mb_strlen($direccion) > 255) {
-    $errores[] = 'La dirección debe tener menos de 255 caracteres.';
-}
-
-if (!in_array($estado, ['activo', 'inactivo'], true)) {
-    $estado = 'activo';
-}
-
-if ($errores) {
-    // Podrías manejar errores guardándolos en sesión y redirigiendo, aquí simplificamos:
-    foreach ($errores as $error) {
-        echo htmlspecialchars($error) . "<br>";
-    }
-    echo '<a href="javascript:history.back()">Volver</a>';
+    header('Location: /pages/login.php?error=csrf');
     exit;
 }
 
-$pdo = getPDO();
+// Sanitizar y validar entradas
+$username = trim($_POST['username'] ?? '');
+$password = $_POST['password'] ?? '';
+
+$errors = [];
+
+if ($username === '' || mb_strlen($username) > 50) {
+    $errors[] = 'Usuario inválido';
+}
+
+if ($password === '' || mb_strlen($password) > 255) {
+    $errors[] = 'Contraseña inválida';
+}
+
+if ($errors) {
+    header('Location: /pages/login.php?error=validation');
+    exit;
+}
 
 try {
-    if ($id) {
-        // Actualizar cliente existente
-        $sql = "UPDATE clientes SET nombre = :nombre, email = :email, telefono = :telefono, direccion = :direccion, estado = :estado WHERE id = :id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':nombre' => $nombre,
-            ':email' => $email,
-            ':telefono' => $telefono ?: null,
-            ':direccion' => $direccion ?: null,
-            ':estado' => $estado,
-            ':id' => $id,
-        ]);
-    } else {
-        // Insertar nuevo cliente
-        $sql = "INSERT INTO clientes (nombre, email, telefono, direccion, estado) VALUES (:nombre, :email, :telefono, :direccion, :estado)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':nombre' => $nombre,
-            ':email' => $email,
-            ':telefono' => $telefono ?: null,
-            ':direccion' => $direccion ?: null,
-            ':estado' => $estado,
-        ]);
+    $pdo = getPDO();
+    
+    // Buscar usuario por username
+    $stmt = $pdo->prepare("SELECT id, username, password_hash, email, role, nombre_completo, activo FROM usuarios WHERE username = :username LIMIT 1");
+    $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+    $stmt->execute();
+    
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    // Verificar si usuario existe, está activo y contraseña es correcta
+    if (!$user || !$user['activo'] || !password_verify($password, $user['password_hash'])) {
+        // Log intento fallido (opcional)
+        error_log("Login fallido para usuario: $username desde IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+        
+        // Esperar un poco para prevenir ataques de fuerza bruta
+        sleep(1);
+        
+        header('Location: /pages/login.php?error=credentials');
+        exit;
     }
-
-    // Redirigir al listado de clientes después de éxito
-    header('Location: ../pages/clientes/index.php?msg=success');
+    
+    // Login exitoso - establecer sesión segura
+    loginUser(
+        (int)$user['id'], 
+        $user['username'], 
+        $user['role']
+    );
+    
+    // Log login exitoso (opcional)
+    error_log("Login exitoso para usuario: {$user['username']} desde IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    
+    // Registrar en auditoría (si la tabla existe)
+    try {
+        $auditStmt = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, descripcion, ip_usuario) VALUES (:user_id, 'login', 'Inicio de sesión exitoso', :ip)");
+        $auditStmt->execute([
+            ':user_id' => $user['id'],
+            ':ip' => $_SERVER['REMOTE_ADDR'] ?? null
+        ]);
+    } catch (PDOException $e) {
+        // Si falla la auditoría, no interrumpir el login
+        error_log("Error en auditoría de login: " . $e->getMessage());
+    }
+    
+    // Redirigir al dashboard
+    header('Location: /pages/dashboard.php');
     exit;
-
+    
 } catch (PDOException $e) {
-    // Manejar errores, mostrar de forma segura
-    echo "Error en base de datos: " . htmlspecialchars($e->getMessage());
-    echo '<br><a href="javascript:history.back()">Volver</a>';
+    error_log("Error en base de datos durante login: " . $e->getMessage());
+    header('Location: /pages/login.php?error=database');
+    exit;
+} catch (Exception $e) {
+    error_log("Error general durante login: " . $e->getMessage());
+    header('Location: /pages/login.php?error=general');
     exit;
 }
