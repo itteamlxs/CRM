@@ -63,6 +63,11 @@ $currentPage = basename($_SERVER['PHP_SELF'], '.php');
             <div class="flex items-center space-x-4">
                 <!-- Solo admin puede ver configuración y usuarios -->
                 <?php if ($userRole === 'admin'): ?>
+                    <a href="<?php echo url('pages/categorias/index.php'); ?>" 
+                       class="<?php echo $currentPage === 'index' && strpos($_SERVER['REQUEST_URI'], 'categorias') ? 'bg-blue-900' : 'hover:bg-blue-700'; ?> text-white px-3 py-2 rounded-md text-sm font-medium">
+                        <?php echo htmlspecialchars($lang['nav_categories'] ?? 'Categorías', ENT_QUOTES, 'UTF-8'); ?>
+                    </a>
+                    
                     <a href="<?php echo url('pages/configuracion.php'); ?>" 
                        class="<?php echo $currentPage === 'configuracion' ? 'bg-blue-900' : 'hover:bg-blue-700'; ?> text-white px-3 py-2 rounded-md text-sm font-medium">
                         <?php echo htmlspecialchars($lang['nav_settings'] ?? 'Configuración', ENT_QUOTES, 'UTF-8'); ?>

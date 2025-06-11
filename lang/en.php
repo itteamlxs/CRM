@@ -202,6 +202,79 @@ return [
     'role' => 'Role',
     'role_admin' => 'Admin',
     'role_seller' => 'Seller',
+    
+    // Navigation - Product module
+    'nav_products' => 'Products',
+    'nav_categories' => 'Categories',
+    
+    // Dashboard - Products
+    'dashboard_total_products' => 'Total Products',
+    'new_product' => 'New Product',
+    
+    // Products
+    'product_list' => 'Product List',
+    'product_name' => 'Product Name',
+    'product_description' => 'Description',
+    'product_category' => 'Category',
+    'product_sku' => 'SKU Code',
+    'product_purchase_price' => 'Purchase Price',
+    'product_sale_price' => 'Sale Price',
+    'product_stock' => 'Stock',
+    'product_min_stock' => 'Minimum Stock',
+    'product_max_stock' => 'Maximum Stock',
+    'product_unit' => 'Unit',
+    'product_image' => 'Image',
+    'product_status' => 'Status',
+    'no_products_found' => 'No products found',
+    'stock_status' => 'Stock Status',
+    'stock_normal' => 'Normal Stock',
+    'stock_low' => 'Low Stock',
+    'stock_out' => 'Out of Stock',
+    'export_csv' => 'Export CSV',
+    'import_csv' => 'Import CSV',
+    
+    // Categories
+    'category_list' => 'Category List',
+    'category_name' => 'Category Name',
+    'category_description' => 'Category Description',
+    'new_category' => 'New Category',
+    'no_categories_found' => 'No categories found',
+    
+    // Forms
+    'required_field' => 'Required field',
+    'optional_field' => 'Optional field',
+    'save' => 'Save',
+    'update' => 'Update',
+    'create' => 'Create',
+    'edit' => 'Edit',
+    'delete' => 'Delete',
+    'cancel' => 'Cancel',
+    'back_to_list' => 'Back to List',
+    
+    // Status
+    'status_active' => 'Active',
+    'status_inactive' => 'Inactive',
+    'enabled' => 'Enabled',
+    'disabled' => 'Disabled',
+    
+    // Messages
+    'success_created' => 'Created successfully',
+    'success_updated' => 'Updated successfully',
+    'success_deleted' => 'Deleted successfully',
+    'error_not_found' => 'Not found',
+    'error_permission_denied' => 'Access denied',
+    'error_invalid_data' => 'Invalid data',
+    
+    // Confirmations
+    'confirm_delete' => 'Are you sure you want to delete this item?',
+    'confirm_delete_product' => 'Are you sure you want to delete this product?',
+    'confirm_delete_category' => 'Are you sure you want to delete this category?',
+    
+    // Import
+    'import_preview' => 'Import Preview',
+    'import_confirm' => 'Confirm Import',
+    'import_success' => 'Import completed',
+    'import_error' => 'Import error',
     'user_created' => 'User created successfully',
     'user_updated' => 'User updated successfully',
     'user_deleted' => 'User deleted successfully',

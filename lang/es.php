@@ -202,6 +202,79 @@ return [
     'role' => 'Rol',
     'role_admin' => 'Admin',
     'role_seller' => 'Vendedor',
+    
+    // Navegación - Módulo de productos
+    'nav_products' => 'Productos',
+    'nav_categories' => 'Categorías',
+    
+    // Dashboard - Productos
+    'dashboard_total_products' => 'Total Productos',
+    'new_product' => 'Nuevo Producto',
+    
+    // Productos
+    'product_list' => 'Lista de Productos',
+    'product_name' => 'Nombre del Producto',
+    'product_description' => 'Descripción',
+    'product_category' => 'Categoría',
+    'product_sku' => 'Código SKU',
+    'product_purchase_price' => 'Precio Compra',
+    'product_sale_price' => 'Precio Venta',
+    'product_stock' => 'Stock',
+    'product_min_stock' => 'Stock Mínimo',
+    'product_max_stock' => 'Stock Máximo',
+    'product_unit' => 'Unidad',
+    'product_image' => 'Imagen',
+    'product_status' => 'Estado',
+    'no_products_found' => 'No se encontraron productos',
+    'stock_status' => 'Estado de Stock',
+    'stock_normal' => 'Stock Normal',
+    'stock_low' => 'Stock Bajo',
+    'stock_out' => 'Sin Stock',
+    'export_csv' => 'Exportar CSV',
+    'import_csv' => 'Importar CSV',
+    
+    // Categorías
+    'category_list' => 'Lista de Categorías',
+    'category_name' => 'Nombre de Categoría',
+    'category_description' => 'Descripción de Categoría',
+    'new_category' => 'Nueva Categoría',
+    'no_categories_found' => 'No se encontraron categorías',
+    
+    // Formularios
+    'required_field' => 'Campo obligatorio',
+    'optional_field' => 'Campo opcional',
+    'save' => 'Guardar',
+    'update' => 'Actualizar',
+    'create' => 'Crear',
+    'edit' => 'Editar',
+    'delete' => 'Eliminar',
+    'cancel' => 'Cancelar',
+    'back_to_list' => 'Volver a la Lista',
+    
+    // Estados
+    'status_active' => 'Activo',
+    'status_inactive' => 'Inactivo',
+    'enabled' => 'Habilitado',
+    'disabled' => 'Deshabilitado',
+    
+    // Mensajes
+    'success_created' => 'Creado correctamente',
+    'success_updated' => 'Actualizado correctamente',
+    'success_deleted' => 'Eliminado correctamente',
+    'error_not_found' => 'No encontrado',
+    'error_permission_denied' => 'Acceso denegado',
+    'error_invalid_data' => 'Datos inválidos',
+    
+    // Confirmaciones
+    'confirm_delete' => '¿Está seguro de eliminar este elemento?',
+    'confirm_delete_product' => '¿Está seguro de eliminar este producto?',
+    'confirm_delete_category' => '¿Está seguro de eliminar esta categoría?',
+    
+    // Importación
+    'import_preview' => 'Vista Previa de Importación',
+    'import_confirm' => 'Confirmar Importación',
+    'import_success' => 'Importación completada',
+    'import_error' => 'Error en importación',
     'user_created' => 'Usuario creado correctamente',
     'user_updated' => 'Usuario actualizado correctamente',
     'user_deleted' => 'Usuario eliminado correctamente',
