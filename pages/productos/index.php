@@ -1,8 +1,7 @@
 <?php
 /**
  * Archivo: pages/productos/index.php
- * Función: Lista de productos con gestión CRUD e inventario
- * Seguridad: Admin y vendedores pueden ver productos
+ * Función: Lista de productos - CORREGIDO para mostrar todos los productos
  */
 
 declare(strict_types=1);
@@ -47,11 +46,11 @@ if ($estado_filter !== '') {
 
 if ($stock_filter !== '') {
     if ($stock_filter === 'sin_stock') {
-        $where_conditions[] = "p.stock_actual <= 0";
+        $where_conditions[] = "COALESCE(p.stock_actual, COALESCE(p.stock, 0)) <= 0";
     } elseif ($stock_filter === 'stock_bajo') {
-        $where_conditions[] = "p.stock_actual > 0 AND p.stock_actual <= p.stock_minimo";
+        $where_conditions[] = "COALESCE(p.stock_actual, COALESCE(p.stock, 0)) > 0 AND COALESCE(p.stock_actual, COALESCE(p.stock, 0)) <= COALESCE(p.stock_minimo, 0)";
     } elseif ($stock_filter === 'stock_normal') {
-        $where_conditions[] = "p.stock_actual > p.stock_minimo";
+        $where_conditions[] = "COALESCE(p.stock_actual, COALESCE(p.stock, 0)) > COALESCE(p.stock_minimo, 0)";
     }
 }
 
@@ -60,11 +59,11 @@ if (!empty($where_conditions)) {
     $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 }
 
-// Contar total para paginación
+// Contar total para paginación - CONSULTA COMPATIBLE
 $count_sql = "
     SELECT COUNT(*) 
     FROM productos p 
-    INNER JOIN categorias c ON p.categoria_id = c.id 
+    LEFT JOIN categorias c ON p.categoria_id = c.id 
     $where_clause
 ";
 $count_stmt = $pdo->prepare($count_sql);
@@ -72,19 +71,32 @@ $count_stmt->execute($params);
 $total_rows = $count_stmt->fetchColumn();
 $total_pages = ceil($total_rows / $per_page);
 
-// Obtener productos con información de categoría
+// Obtener productos - CONSULTA COMPATIBLE CON ESTRUCTURA ACTUAL
 $sql = "
     SELECT 
-        p.*,
-        c.nombre as categoria_nombre,
+        p.id,
+        p.nombre,
+        p.descripcion,
+        p.categoria_id,
+        p.codigo_sku,
+        COALESCE(p.precio_compra, 0) as precio_compra,
+        COALESCE(p.precio_venta, p.precio_base, 0) as precio_venta,
+        COALESCE(p.stock_actual, p.stock, 0) as stock_actual,
+        COALESCE(p.stock_minimo, 0) as stock_minimo,
+        p.stock_maximo,
+        p.unidad_medida,
+        p.imagen,
+        p.activo,
+        p.fecha_creacion,
+        COALESCE(c.nombre, 'Sin categoría') as categoria_nombre,
         CASE 
-            WHEN p.stock_actual <= 0 THEN 'sin_stock'
-            WHEN p.stock_actual <= p.stock_minimo THEN 'stock_bajo'
+            WHEN COALESCE(p.stock_actual, p.stock, 0) <= 0 THEN 'sin_stock'
+            WHEN COALESCE(p.stock_actual, p.stock, 0) <= COALESCE(p.stock_minimo, 0) THEN 'stock_bajo'
             ELSE 'stock_normal'
         END as estado_stock,
-        (p.precio_venta - p.precio_compra) as margen_ganancia
+        (COALESCE(p.precio_venta, p.precio_base, 0) - COALESCE(p.precio_compra, 0)) as margen_ganancia
     FROM productos p 
-    INNER JOIN categorias c ON p.categoria_id = c.id 
+    LEFT JOIN categorias c ON p.categoria_id = c.id 
     $where_clause
     ORDER BY p.nombre ASC 
     LIMIT :limit OFFSET :offset
@@ -99,8 +111,22 @@ $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
 $stmt->execute();
 $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener categorías para filtro
-$categorias = getCategorias($pdo);
+// DEBUG: Mostrar consulta si hay problemas
+if (isset($_GET['debug']) && $_SESSION['role'] === 'admin') {
+    echo "<pre>SQL: $sql</pre>";
+    echo "<pre>Productos encontrados: " . count($productos) . "</pre>";
+    echo "<pre>Total en BD: $total_rows</pre>";
+}
+
+// Obtener categorías para filtro - COMPATIBLE
+$categorias = [];
+try {
+    $stmt = $pdo->prepare("SELECT id, nombre FROM categorias ORDER BY nombre ASC");
+    $stmt->execute();
+    $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Error obteniendo categorías: " . $e->getMessage());
+}
 
 // Exportar CSV si solicitado
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
@@ -273,16 +299,6 @@ require_once __DIR__ . '/../../includes/header.php';
                     </a>
                     
                     <a 
-                        href="importar.php" 
-                        class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
-                    >
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                        </svg>
-                        Importar CSV
-                    </a>
-                    
-                    <a 
                         href="form.php" 
                         class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                     >
@@ -300,6 +316,9 @@ require_once __DIR__ . '/../../includes/header.php';
             Mostrando <strong><?php echo count($productos); ?></strong> de <strong><?php echo $total_rows; ?></strong> productos
             <?php if ($search || $categoria_filter || $estado_filter || $stock_filter): ?>
                 con filtros aplicados
+            <?php endif; ?>
+            <?php if ($_SESSION['role'] === 'admin'): ?>
+                <a href="?debug=1" class="ml-4 text-blue-600 hover:text-blue-800">Debug</a>
             <?php endif; ?>
         </div>
     </div>
@@ -339,19 +358,19 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
                     <!-- Imagen del producto -->
                     <div class="h-48 bg-gray-200 dark:bg-gray-700 relative">
-                        <?php if ($producto['imagen']): ?>
+                        <?php if (!empty($producto['imagen'])): ?>
                             <img 
-                                src="<?php echo getImagenProductoUrl($producto['imagen']); ?>" 
+                                src="../../uploads/productos/<?php echo htmlspecialchars($producto['imagen'], ENT_QUOTES, 'UTF-8'); ?>" 
                                 alt="<?php echo htmlspecialchars($producto['nombre'], ENT_QUOTES, 'UTF-8'); ?>"
                                 class="w-full h-full object-cover"
+                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                             />
-                        <?php else: ?>
-                            <div class="w-full h-full flex items-center justify-center">
-                                <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                </svg>
-                            </div>
                         <?php endif; ?>
+                        <div class="w-full h-full flex items-center justify-center <?php echo !empty($producto['imagen']) ? 'hidden' : ''; ?>">
+                            <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                        </div>
                         
                         <!-- Badge de stock -->
                         <div class="absolute top-2 right-2">
