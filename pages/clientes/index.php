@@ -1,10 +1,11 @@
 <?php
 /**
- * Archivo: pages/clientes/index.php - CORREGIDO
- * Función: Lista clientes con búsqueda, paginación, exportación CSV.
- * Seguridad: Validación sesión, roles, salida escapada.
- * CORREGIDO: Manejo de parámetros PDO para búsqueda sin errores 500
+ * Archivo: pages/clientes/index.php - REPARADO CON FILTROS
+ * Función: Lista clientes con búsqueda PURE CSS/JS + Filtros (sin AJAX)
+ * Mejora: Búsqueda instantánea + filtro activos/inactivos
  */
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../config/database.php';
@@ -14,13 +15,14 @@ requireRole(['admin', 'vendedor']);
 
 $pdo = getPDO();
 
-$search = trim($_GET['search'] ?? '');
+// Parámetros de búsqueda tradicional (solo para backend si es necesario)
+$search_backend = trim($_GET['search'] ?? '');
 $mostrar_eliminados = isset($_GET['eliminados']) && $_GET['eliminados'] === '1' && $_SESSION['role'] === 'admin';
 $page = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT) ?: 1;
-$per_page = 10;
+$per_page = 50; // Aumentamos para cargar más clientes para búsqueda frontend
 $offset = ($page - 1) * $per_page;
 
-// Construir condición WHERE y parámetros de búsqueda
+// Construir condición WHERE
 $where_conditions = [];
 $search_params = [];
 
@@ -31,22 +33,22 @@ if (!$mostrar_eliminados) {
     $where_conditions[] = "eliminado = TRUE";
 }
 
-// Filtro de búsqueda
-if ($search !== '') {
+// Filtro de búsqueda backend (solo si es necesario)
+if ($search_backend !== '') {
     $where_conditions[] = "(nombre LIKE :search OR email LIKE :search OR telefono LIKE :search)";
-    $search_params[':search'] = "%$search%";
+    $search_params[':search'] = "%$search_backend%";
 }
 
 $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 
-// Contar total para paginación (SIN LIMIT/OFFSET)
+// Contar total para paginación
 $count_sql = "SELECT COUNT(*) FROM clientes $where_clause";
 $count_stmt = $pdo->prepare($count_sql);
 $count_stmt->execute($search_params);
 $total_rows = $count_stmt->fetchColumn();
 $total_pages = ceil($total_rows / $per_page);
 
-// Obtener registros paginados con información de eliminación si es necesario
+// Obtener clientes
 if ($mostrar_eliminados) {
     $sql = "
         SELECT 
@@ -85,7 +87,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     exit;
 }
 
-include __DIR__ . '/../../includes/header.php';
+require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
@@ -96,7 +98,7 @@ include __DIR__ . '/../../includes/header.php';
                     <?php if ($mostrar_eliminados): ?>
                         📋 Clientes Eliminados
                     <?php else: ?>
-                        <?php echo htmlspecialchars($lang['client_list'] ?? 'Lista de Clientes', ENT_QUOTES, 'UTF-8'); ?>
+                        Lista de Clientes
                     <?php endif; ?>
                 </h1>
                 <p class="text-gray-600 dark:text-gray-400 mt-1">
@@ -135,44 +137,73 @@ include __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 
-    <!-- Barra de búsqueda y acciones -->
+    <!-- Barra de búsqueda INSTANTÁNEA con FILTROS -->
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
-        <div class="flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <!-- Búsqueda con autocompletado -->
-            <form method="GET" class="flex-1 flex gap-2 max-w-md" id="busqueda-form">
-                <div class="flex-1 relative">
+        <div class="flex flex-col lg:flex-row gap-4 items-center justify-between">
+            <!-- Búsqueda instantánea -->
+            <div class="flex-1 max-w-md">
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
                     <input
                         type="text"
-                        name="search"
-                        placeholder="<?php echo htmlspecialchars($lang['search'] ?? 'Buscar clientes en tiempo real...', ENT_QUOTES, 'UTF-8'); ?>"
-                        value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>"
-                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        id="busqueda-instantanea"
+                        placeholder="🔍 Buscar por nombre, email o teléfono..."
+                        class="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         autocomplete="off"
                         spellcheck="false"
                     />
-                    <!-- Los resultados de búsqueda en tiempo real aparecerán aquí -->
+                    <!-- Botón limpiar -->
+                    <button
+                        type="button"
+                        id="limpiar-busqueda"
+                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 hidden"
+                        onclick="limpiarTodo()"
+                    >
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
-                <button 
-                    type="submit" 
-                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                    title="Búsqueda tradicional (fallback)"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                </button>
-            </form>
+            </div>
+
+            <!-- Filtros -->
+            <div class="flex items-center gap-4">
+                <!-- Filtro por estado -->
+                <div class="flex items-center gap-2">
+                    <label for="filtro-estado" class="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                        Estado:
+                    </label>
+                    <select 
+                        id="filtro-estado" 
+                        class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    >
+                        <option value="">Todos</option>
+                        <option value="activo">✅ Activos</option>
+                        <option value="inactivo">❌ Inactivos</option>
+                    </select>
+                </div>
+
+                <!-- Contador de resultados -->
+                <div id="contador-resultados" class="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                    <span id="total-visible"><?php echo count($clientes); ?></span> de 
+                    <span id="total-clientes"><?php echo count($clientes); ?></span> clientes
+                </div>
+            </div>
 
             <!-- Acciones -->
             <div class="flex gap-2">
                 <a 
-                    href="?export=csv<?php echo $search !== '' ? '&search=' . urlencode($search) : ''; ?>" 
+                    href="?export=csv<?php echo $search_backend !== '' ? '&search=' . urlencode($search_backend) : ''; ?>" 
                     class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
                 >
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <?php echo htmlspecialchars($lang['export_csv'] ?? 'Exportar CSV', ENT_QUOTES, 'UTF-8'); ?>
+                    Exportar CSV
                 </a>
                 
                 <a 
@@ -182,25 +213,19 @@ include __DIR__ . '/../../includes/header.php';
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <?php echo htmlspecialchars($lang['new_client'] ?? 'Nuevo Cliente', ENT_QUOTES, 'UTF-8'); ?>
+                    Nuevo Cliente
                 </a>
             </div>
         </div>
         
-        <!-- Resultados de búsqueda -->
-        <?php if ($search !== ''): ?>
-            <div class="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                <span>
-                    <?php echo htmlspecialchars($lang['showing'] ?? 'Mostrando', ENT_QUOTES, 'UTF-8'); ?> 
-                    <strong><?php echo count($clientes); ?></strong>
-                    <?php echo htmlspecialchars($lang['results'] ?? 'resultados', ENT_QUOTES, 'UTF-8'); ?> 
-                    <?php echo htmlspecialchars($lang['of'] ?? 'de', ENT_QUOTES, 'UTF-8'); ?> 
-                    <strong><?php echo $total_rows; ?></strong>
-                    para "<strong><?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?></strong>"
-                </span>
-                <a href="?" class="ml-2 text-blue-600 hover:text-blue-800">Limpiar búsqueda</a>
-            </div>
-        <?php endif; ?>
+        <!-- Mensaje cuando no hay resultados -->
+        <div id="sin-resultados" class="hidden mt-4 text-center py-8">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <h3 class="mt-2 text-lg font-medium text-gray-900 dark:text-white">Sin resultados</h3>
+            <p class="mt-1 text-gray-500 dark:text-gray-400">No se encontraron clientes con los filtros aplicados.</p>
+        </div>
     </div>
 
     <!-- Tabla de clientes -->
@@ -211,29 +236,22 @@ include __DIR__ . '/../../includes/header.php';
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
                 <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                    <?php echo htmlspecialchars($lang['no_clients_found'] ?? 'No se encontraron clientes', ENT_QUOTES, 'UTF-8'); ?>
+                    No se encontraron clientes
                 </h3>
                 <p class="mt-2 text-gray-500 dark:text-gray-400">
-                    <?php if ($search !== ''): ?>
-                        Intenta con otros términos de búsqueda o 
-                        <a href="?" class="text-blue-600 hover:text-blue-800">ver todos los clientes</a>
-                    <?php else: ?>
-                        Comienza agregando tu primer cliente al sistema
-                    <?php endif; ?>
+                    Comienza agregando tu primer cliente al sistema
                 </p>
-                <?php if ($search === ''): ?>
-                    <div class="mt-6">
-                        <a 
-                            href="<?php echo url('forms/form_cliente.php'); ?>" 
-                            class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                        >
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <?php echo htmlspecialchars($lang['new_client'] ?? 'Crear Primer Cliente', ENT_QUOTES, 'UTF-8'); ?>
-                        </a>
-                    </div>
-                <?php endif; ?>
+                <div class="mt-6">
+                    <a 
+                        href="<?php echo url('forms/form_cliente.php'); ?>" 
+                        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                    >
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Crear Primer Cliente
+                    </a>
+                </div>
             </div>
         <?php else: ?>
             <div class="overflow-x-auto">
@@ -241,13 +259,13 @@ include __DIR__ . '/../../includes/header.php';
                     <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                <?php echo htmlspecialchars($lang['client_name'] ?? 'Nombre', ENT_QUOTES, 'UTF-8'); ?>
+                                Nombre
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                <?php echo htmlspecialchars($lang['client_email'] ?? 'Email', ENT_QUOTES, 'UTF-8'); ?>
+                                Email
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                <?php echo htmlspecialchars($lang['client_phone'] ?? 'Teléfono', ENT_QUOTES, 'UTF-8'); ?>
+                                Teléfono
                             </th>
                             <?php if ($mostrar_eliminados): ?>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -258,20 +276,25 @@ include __DIR__ . '/../../includes/header.php';
                                 </th>
                             <?php else: ?>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    <?php echo htmlspecialchars($lang['client_status'] ?? 'Estado', ENT_QUOTES, 'UTF-8'); ?>
+                                    Estado
                                 </th>
                             <?php endif; ?>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                <?php echo htmlspecialchars($lang['actions'] ?? 'Acciones', ENT_QUOTES, 'UTF-8'); ?>
+                                Acciones
                             </th>
                         </tr>
                     </thead>
-                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tbody id="tabla-clientes" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         <?php foreach ($clientes as $cliente): ?>
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 <?php echo $mostrar_eliminados ? 'opacity-75' : ''; ?>">
+                            <tr class="cliente-row hover:bg-gray-50 dark:hover:bg-gray-700 <?php echo $mostrar_eliminados ? 'opacity-75' : ''; ?>"
+                                data-nombre="<?php echo htmlspecialchars(strtolower($cliente['nombre']), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-email="<?php echo htmlspecialchars(strtolower($cliente['email']), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-telefono="<?php echo htmlspecialchars(strtolower($cliente['telefono'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-estado="<?php echo htmlspecialchars($cliente['estado'], ENT_QUOTES, 'UTF-8'); ?>"
+                            >
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="text-sm font-medium text-gray-900 dark:text-white">
-                                        <?php echo htmlspecialchars($cliente['nombre'], ENT_QUOTES, 'UTF-8'); ?>
+                                        <span class="searchable-nombre"><?php echo htmlspecialchars($cliente['nombre'], ENT_QUOTES, 'UTF-8'); ?></span>
                                         <?php if ($mostrar_eliminados): ?>
                                             <span class="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
                                                 Eliminado
@@ -283,10 +306,10 @@ include __DIR__ . '/../../includes/header.php';
                                     <div class="text-sm text-gray-900 dark:text-white">
                                         <?php if (!$mostrar_eliminados): ?>
                                             <a href="mailto:<?php echo htmlspecialchars($cliente['email'], ENT_QUOTES, 'UTF-8'); ?>" class="text-blue-600 hover:text-blue-800">
-                                                <?php echo htmlspecialchars($cliente['email'], ENT_QUOTES, 'UTF-8'); ?>
+                                                <span class="searchable-email"><?php echo htmlspecialchars($cliente['email'], ENT_QUOTES, 'UTF-8'); ?></span>
                                             </a>
                                         <?php else: ?>
-                                            <?php echo htmlspecialchars($cliente['email'], ENT_QUOTES, 'UTF-8'); ?>
+                                            <span class="searchable-email"><?php echo htmlspecialchars($cliente['email'], ENT_QUOTES, 'UTF-8'); ?></span>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -295,10 +318,10 @@ include __DIR__ . '/../../includes/header.php';
                                         <?php if ($cliente['telefono']): ?>
                                             <?php if (!$mostrar_eliminados): ?>
                                                 <a href="tel:<?php echo htmlspecialchars($cliente['telefono'], ENT_QUOTES, 'UTF-8'); ?>" class="text-blue-600 hover:text-blue-800">
-                                                    <?php echo htmlspecialchars($cliente['telefono'], ENT_QUOTES, 'UTF-8'); ?>
+                                                    <span class="searchable-telefono"><?php echo htmlspecialchars($cliente['telefono'], ENT_QUOTES, 'UTF-8'); ?></span>
                                                 </a>
                                             <?php else: ?>
-                                                <?php echo htmlspecialchars($cliente['telefono'], ENT_QUOTES, 'UTF-8'); ?>
+                                                <span class="searchable-telefono"><?php echo htmlspecialchars($cliente['telefono'], ENT_QUOTES, 'UTF-8'); ?></span>
                                             <?php endif; ?>
                                         <?php else: ?>
                                             <span class="text-gray-500">-</span>
@@ -320,11 +343,11 @@ include __DIR__ . '/../../includes/header.php';
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <?php if ($cliente['estado'] === 'activo'): ?>
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                                <?php echo htmlspecialchars($lang['status_active'] ?? 'Activo', ENT_QUOTES, 'UTF-8'); ?>
+                                                Activo
                                             </span>
                                         <?php else: ?>
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                                                <?php echo htmlspecialchars($lang['status_inactive'] ?? 'Inactivo', ENT_QUOTES, 'UTF-8'); ?>
+                                                Inactivo
                                             </span>
                                         <?php endif; ?>
                                     </td>
@@ -345,22 +368,12 @@ include __DIR__ . '/../../includes/header.php';
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                                 </svg>
                                             </a>
-                                            
-                                            <button 
-                                                onclick="mostrarDetallesEliminacion(<?php echo (int)$cliente['id']; ?>)" 
-                                                class="text-blue-600 hover:text-blue-900 transition-colors"
-                                                title="Ver detalles"
-                                            >
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                            </button>
                                         <?php else: ?>
                                             <!-- Acciones para clientes activos -->
                                             <a 
                                                 href="<?php echo url('forms/form_cliente.php?id=' . (int)$cliente['id']); ?>" 
                                                 class="text-blue-600 hover:text-blue-900 transition-colors"
-                                                title="<?php echo htmlspecialchars($lang['edit'] ?? 'Editar', ENT_QUOTES, 'UTF-8'); ?>"
+                                                title="Editar"
                                             >
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -370,9 +383,9 @@ include __DIR__ . '/../../includes/header.php';
                                             <?php if ($_SESSION['role'] === 'admin'): ?>
                                                 <a 
                                                     href="eliminar.php?id=<?php echo (int)$cliente['id']; ?>&csrf_token=<?php echo htmlspecialchars(generate_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>" 
-                                                    onclick="return confirm('¿Está seguro de eliminar este cliente? Esta acción se puede deshacer desde la papelera.');" 
+                                                    onclick="return confirm('¿Está seguro de eliminar este cliente?');" 
                                                     class="text-red-600 hover:text-red-900 transition-colors"
-                                                    title="<?php echo htmlspecialchars($lang['delete'] ?? 'Eliminar', ENT_QUOTES, 'UTF-8'); ?>"
+                                                    title="Eliminar"
                                                 >
                                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -394,14 +407,14 @@ include __DIR__ . '/../../includes/header.php';
                     <div class="flex items-center justify-between">
                         <div class="flex-1 flex justify-between sm:hidden">
                             <?php if ($page > 1): ?>
-                                <a href="?page=<?php echo $page - 1; ?><?php echo $search !== '' ? '&search=' . urlencode($search) : ''; ?>" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                                    <?php echo htmlspecialchars($lang['previous'] ?? 'Anterior', ENT_QUOTES, 'UTF-8'); ?>
+                                <a href="?page=<?php echo $page - 1; ?><?php echo $search_backend !== '' ? '&search=' . urlencode($search_backend) : ''; ?>" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                    Anterior
                                 </a>
                             <?php endif; ?>
                             
                             <?php if ($page < $total_pages): ?>
-                                <a href="?page=<?php echo $page + 1; ?><?php echo $search !== '' ? '&search=' . urlencode($search) : ''; ?>" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                                    <?php echo htmlspecialchars($lang['next'] ?? 'Siguiente', ENT_QUOTES, 'UTF-8'); ?>
+                                <a href="?page=<?php echo $page + 1; ?><?php echo $search_backend !== '' ? '&search=' . urlencode($search_backend) : ''; ?>" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                    Siguiente
                                 </a>
                             <?php endif; ?>
                         </div>
@@ -409,13 +422,13 @@ include __DIR__ . '/../../includes/header.php';
                         <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                             <div>
                                 <p class="text-sm text-gray-700 dark:text-gray-300">
-                                    <?php echo htmlspecialchars($lang['showing'] ?? 'Mostrando', ENT_QUOTES, 'UTF-8'); ?>
+                                    Mostrando
                                     <span class="font-medium"><?php echo $offset + 1; ?></span>
-                                    <?php echo htmlspecialchars($lang['of'] ?? 'de', ENT_QUOTES, 'UTF-8'); ?>
+                                    de
                                     <span class="font-medium"><?php echo min($offset + $per_page, $total_rows); ?></span>
-                                    <?php echo htmlspecialchars($lang['of'] ?? 'de', ENT_QUOTES, 'UTF-8'); ?>
+                                    de
                                     <span class="font-medium"><?php echo $total_rows; ?></span>
-                                    <?php echo htmlspecialchars($lang['results'] ?? 'resultados', ENT_QUOTES, 'UTF-8'); ?>
+                                    resultados
                                 </p>
                             </div>
                             
@@ -423,7 +436,7 @@ include __DIR__ . '/../../includes/header.php';
                                 <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                                     <?php for ($p = 1; $p <= $total_pages; $p++): ?>
                                         <a 
-                                            href="?page=<?php echo $p; ?><?php echo $search !== '' ? '&search=' . urlencode($search) : ''; ?>" 
+                                            href="?page=<?php echo $p; ?><?php echo $search_backend !== '' ? '&search=' . urlencode($search_backend) : ''; ?>" 
                                             class="<?php echo $p === $page ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'; ?> relative inline-flex items-center px-4 py-2 border text-sm font-medium"
                                         >
                                             <?php echo $p; ?>
@@ -439,333 +452,141 @@ include __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<!-- JavaScript para búsqueda en tiempo real -->
 <script>
 /**
- * Búsqueda en tiempo real para clientes
- * Versión integrada directamente en la página
+ * Búsqueda instantánea con filtros - Pure JavaScript
  */
-
-class BusquedaTiempoReal {
-    constructor(options = {}) {
-        this.searchInput = null;
-        this.resultsContainer = null;
-        this.currentIndex = -1;
-        this.results = [];
-        this.debounceTimer = null;
+class BusquedaConFiltros {
+    constructor() {
+        this.input = document.getElementById('busqueda-instantanea');
+        this.filtroEstado = document.getElementById('filtro-estado');
+        this.btnLimpiar = document.getElementById('limpiar-busqueda');
+        this.filas = document.querySelectorAll('.cliente-row');
+        this.sinResultados = document.getElementById('sin-resultados');
+        this.contadorVisible = document.getElementById('total-visible');
+        this.contadorTotal = document.getElementById('total-clientes');
         
-        // Configuración
-        this.config = {
-            minChars: 2,
-            debounceDelay: 300,
-            maxResults: 10,
-            endpoint: options.endpoint || 'buscar_ajax.php',
-            onSelect: options.onSelect || this.defaultOnSelect.bind(this),
-            ...options
-        };
+        this.totalClientes = this.filas.length;
+        this.contadorTotal.textContent = this.totalClientes;
         
         this.init();
     }
     
     init() {
-        this.createSearchContainer();
-        this.bindEvents();
-        this.injectStyles();
-    }
-    
-    createSearchContainer() {
-        // Encontrar el input de búsqueda
-        this.searchInput = document.querySelector('input[name="search"]');
-        if (!this.searchInput) return;
+        this.input.addEventListener('input', () => this.aplicarFiltros());
+        this.filtroEstado.addEventListener('change', () => this.aplicarFiltros());
+        this.btnLimpiar.addEventListener('click', () => this.limpiarTodo());
         
-        // Crear contenedor de resultados
-        this.resultsContainer = document.createElement('div');
-        this.resultsContainer.className = 'busqueda-resultados';
-        this.resultsContainer.style.display = 'none';
-        
-        // Insertar después del input
-        this.searchInput.parentNode.style.position = 'relative';
-        this.searchInput.parentNode.appendChild(this.resultsContainer);
-    }
-    
-    bindEvents() {
-        // Evento de escritura
-        this.searchInput.addEventListener('input', (e) => {
-            this.handleInput(e.target.value);
-        });
-        
-        // Navegación por teclado
-        this.searchInput.addEventListener('keydown', (e) => {
-            this.handleKeydown(e);
-        });
-        
-        // Cerrar al hacer click fuera
-        document.addEventListener('click', (e) => {
-            if (!this.searchInput.parentNode.contains(e.target)) {
-                this.hideResults();
+        this.input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.limpiarTodo();
             }
         });
         
-        // Mostrar al enfocar si hay texto
-        this.searchInput.addEventListener('focus', () => {
-            if (this.searchInput.value.length >= this.config.minChars && this.results.length > 0) {
-                this.showResultsContainer();
-            }
-        });
+        console.log('Búsqueda con filtros inicializada - ' + this.totalClientes + ' clientes');
     }
     
-    handleInput(query) {
-        clearTimeout(this.debounceTimer);
+    aplicarFiltros() {
+        const termino = this.input.value.toLowerCase().trim();
+        const estadoFiltro = this.filtroEstado.value;
         
-        if (query.length < this.config.minChars) {
-            this.hideResults();
-            return;
+        if (termino || estadoFiltro) {
+            this.btnLimpiar.classList.remove('hidden');
+        } else {
+            this.btnLimpiar.classList.add('hidden');
         }
         
-        this.debounceTimer = setTimeout(() => {
-            this.search(query);
-        }, this.config.debounceDelay);
-    }
-    
-    handleKeydown(e) {
-        if (!this.isResultsVisible()) return;
+        let visibles = 0;
         
-        switch (e.key) {
-            case 'ArrowDown':
-                e.preventDefault();
-                this.navigateDown();
-                break;
-            case 'ArrowUp':
-                e.preventDefault();
-                this.navigateUp();
-                break;
-            case 'Enter':
-                e.preventDefault();
-                this.selectCurrent();
-                break;
-            case 'Escape':
-                e.preventDefault();
-                this.hideResults();
-                break;
-        }
-    }
-    
-    async search(query) {
-        try {
-            this.showLoading();
+        this.filas.forEach(fila => {
+            const mostrar = this.evaluarFila(fila, termino, estadoFiltro);
             
-            const response = await fetch(`buscar_ajax.php?q=${encodeURIComponent(query)}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
+            if (mostrar) {
+                fila.style.display = '';
+                if (termino) {
+                    this.resaltarTermino(fila, termino);
+                } else {
+                    this.removerResaltado(fila);
                 }
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.results = data.results;
-                this.displayResults();
+                visibles++;
             } else {
-                this.showError(data.message);
+                fila.style.display = 'none';
+                this.removerResaltado(fila);
             }
-            
-        } catch (error) {
-            console.error('Error búsqueda:', error);
-            this.showError('Error de conexión');
+        });
+        
+        this.contadorVisible.textContent = visibles;
+        
+        if (visibles === 0 && (termino !== '' || estadoFiltro !== '')) {
+            this.sinResultados.classList.remove('hidden');
+        } else {
+            this.sinResultados.classList.add('hidden');
         }
     }
     
-    showLoading() {
-        this.resultsContainer.innerHTML = `
-            <div class="px-4 py-3 text-gray-500 flex items-center">
-                <svg class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"></circle>
-                    <path fill="currentColor" class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                </svg>
-                Buscando...
-            </div>
-        `;
-        this.showResultsContainer();
-    }
-    
-    displayResults() {
-        if (this.results.length === 0) {
-            this.showNoResults();
-            return;
+    evaluarFila(fila, termino, estadoFiltro) {
+        if (estadoFiltro && fila.dataset.estado !== estadoFiltro) {
+            return false;
         }
         
-        const items = this.results.map((cliente, index) => `
-            <div class="busqueda-item px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-600 last:border-b-0" 
-                 data-index="${index}" data-id="${cliente.id}">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <div class="font-medium text-gray-900 dark:text-white">
-                            ${cliente.nombre_highlight}
-                        </div>
-                        <div class="text-sm text-gray-500 dark:text-gray-400">
-                            ${cliente.email_highlight}
-                            ${cliente.telefono ? ` • ${cliente.telefono}` : ''}
-                        </div>
-                    </div>
-                    <div class="ml-4">
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                            ${cliente.estado}
-                        </span>
-                    </div>
-                </div>
-            </div>
-        `).join('');
+        if (!termino) {
+            return true;
+        }
         
-        this.resultsContainer.innerHTML = items;
-        this.showResultsContainer();
-        this.currentIndex = -1;
-        this.bindResultEvents();
+        const nombre = fila.dataset.nombre || '';
+        const email = fila.dataset.email || '';
+        const telefono = fila.dataset.telefono || '';
+        
+        return nombre.includes(termino) || 
+               email.includes(termino) || 
+               telefono.includes(termino);
     }
     
-    showNoResults() {
-        this.resultsContainer.innerHTML = `
-            <div class="px-4 py-6 text-center text-gray-500">
-                <svg class="mx-auto h-8 w-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                No se encontraron clientes
-            </div>
-        `;
-        this.showResultsContainer();
-    }
-    
-    showError(message) {
-        this.resultsContainer.innerHTML = `
-            <div class="px-4 py-6 text-center text-red-500">
-                <svg class="mx-auto h-8 w-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                ${message}
-            </div>
-        `;
-        this.showResultsContainer();
-    }
-    
-    bindResultEvents() {
-        const items = this.resultsContainer.querySelectorAll('.busqueda-item');
-        items.forEach((item, index) => {
-            item.addEventListener('click', () => this.selectResult(index));
-            item.addEventListener('mouseenter', () => this.setActiveIndex(index));
+    resaltarTermino(fila, termino) {
+        const elementos = fila.querySelectorAll('.searchable-nombre, .searchable-email, .searchable-telefono');
+        
+        elementos.forEach(elemento => {
+            const textoOriginal = elemento.textContent;
+            const regex = new RegExp('(' + this.escaparRegex(termino) + ')', 'gi');
+            const textoResaltado = textoOriginal.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-600 px-1 rounded">$1</mark>');
+            elemento.innerHTML = textoResaltado;
         });
     }
     
-    navigateDown() {
-        const newIndex = this.currentIndex < this.results.length - 1 ? this.currentIndex + 1 : 0;
-        this.setActiveIndex(newIndex);
-    }
-    
-    navigateUp() {
-        const newIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.results.length - 1;
-        this.setActiveIndex(newIndex);
-    }
-    
-    setActiveIndex(index) {
-        // Remover clase activa anterior
-        this.resultsContainer.querySelectorAll('.busqueda-item').forEach(item => {
-            item.classList.remove('bg-blue-50', 'dark:bg-blue-900');
+    removerResaltado(fila) {
+        const elementos = fila.querySelectorAll('.searchable-nombre, .searchable-email, .searchable-telefono');
+        
+        elementos.forEach(elemento => {
+            const textoLimpio = elemento.textContent;
+            elemento.innerHTML = textoLimpio;
         });
-        
-        this.currentIndex = index;
-        
-        if (index >= 0) {
-            const item = this.resultsContainer.querySelector(`[data-index="${index}"]`);
-            if (item) {
-                item.classList.add('bg-blue-50', 'dark:bg-blue-900');
-                item.scrollIntoView({ block: 'nearest' });
-            }
-        }
     }
     
-    selectCurrent() {
-        if (this.currentIndex >= 0) {
-            this.selectResult(this.currentIndex);
-        }
+    escaparRegex(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
     
-    selectResult(index) {
-        const cliente = this.results[index];
-        if (cliente) {
-            this.config.onSelect(cliente);
-            this.hideResults();
-        }
-    }
-    
-    defaultOnSelect(cliente) {
-        // Ir a editar cliente
-        window.location.href = cliente.url_editar;
-    }
-    
-    showResultsContainer() {
-        this.resultsContainer.style.display = 'block';
-    }
-    
-    hideResults() {
-        this.resultsContainer.style.display = 'none';
-        this.currentIndex = -1;
-    }
-    
-    isResultsVisible() {
-        return this.resultsContainer.style.display === 'block';
-    }
-    
-    injectStyles() {
-        if (document.getElementById('busqueda-styles')) return;
-        
-        const style = document.createElement('style');
-        style.id = 'busqueda-styles';
-        style.textContent = `
-            .busqueda-resultados {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
-                z-index: 50;
-                background: white;
-                border: 1px solid #e5e7eb;
-                border-radius: 0.375rem;
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-                max-height: 400px;
-                overflow-y: auto;
-                margin-top: 4px;
-            }
-            
-            .dark .busqueda-resultados {
-                background: #374151;
-                border-color: #4b5563;
-            }
-            
-            mark {
-                background-color: #fef3c7;
-                color: #92400e;
-                padding: 0;
-                border-radius: 2px;
-            }
-            
-            .dark mark {
-                background-color: #d97706;
-                color: #fff;
-            }
-        `;
-        document.head.appendChild(style);
+    limpiarTodo() {
+        this.input.value = '';
+        this.filtroEstado.value = '';
+        this.aplicarFiltros();
+        this.input.focus();
     }
 }
 
-// Inicializar búsqueda en tiempo real
+function limpiarTodo() {
+    if (window.busquedaInstancia) {
+        window.busquedaInstancia.limpiarTodo();
+    }
+}
+
+function limpiarBusqueda() {
+    limpiarTodo();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    new BusquedaTiempoReal();
+    window.busquedaInstancia = new BusquedaConFiltros();
 });
-
-// Función para mostrar detalles de eliminación
-function mostrarDetallesEliminacion(clienteId) {
-    // Aquí podrías hacer una llamada AJAX para obtener más detalles
-    // Por ahora, simplemente mostramos una alerta
-    alert('Detalles de eliminación del cliente ID: ' + clienteId + '\n\nPuedes implementar un modal aquí para mostrar más información como:\n- Historial de cotizaciones\n- Ventas asociadas\n- Motivo de eliminación');
-}
 </script>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

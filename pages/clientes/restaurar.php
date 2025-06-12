@@ -1,8 +1,9 @@
 <?php
 /**
- * Archivo: pages/clientes/restaurar.php
- * Función: Restaurar cliente eliminado (deshacer soft delete)
- * Seguridad: Solo admin, validación CSRF, auditoría
+ * Archivo: pages/clientes/restaurar.php - CORREGIDO
+ * Función: Restaurar cliente eliminado (cambiar eliminado de TRUE a FALSE)
+ * Seguridad: Solo admin puede restaurar, validación CSRF, auditoría
+ * CORREGIDO: Simplificado - solo cambia eliminado=FALSE
  */
 
 declare(strict_types=1);
@@ -17,20 +18,20 @@ requireRole(['admin']);
 // Solo procesar GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
-    header('Location: ' . url('pages/clientes/index.php?error=method'));
+    header('Location: ' . url('pages/clientes/index.php?error=method_not_allowed'));
     exit;
 }
 
 // Validar token CSRF
 $token = $_GET['csrf_token'] ?? '';
 if (!validate_csrf_token($token)) {
-    header('Location: ' . url('pages/clientes/index.php?eliminados=1&error=csrf'));
+    header('Location: ' . url('pages/clientes/index.php?eliminados=1&error=token_invalido'));
     exit;
 }
 
-// Obtener ID del cliente
+// Obtener y validar ID del cliente
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-if (!$id) {
+if (!$id || $id <= 0) {
     header('Location: ' . url('pages/clientes/index.php?eliminados=1&error=') . urlencode('ID de cliente inválido'));
     exit;
 }
@@ -40,10 +41,10 @@ $pdo = getPDO();
 try {
     $pdo->beginTransaction();
     
-    // Verificar que el cliente existe y ESTÁ eliminado
+    // 1. Verificar que el cliente existe y ESTÁ eliminado
     $stmt = $pdo->prepare("
         SELECT 
-            nombre, email, eliminado, fecha_eliminacion,
+            id, nombre, email, eliminado, fecha_eliminacion,
             u.username as eliminado_por_usuario
         FROM clientes c
         LEFT JOIN usuarios u ON c.eliminado_por = u.id
@@ -64,8 +65,12 @@ try {
         exit;
     }
     
-    // Verificar si ya existe otro cliente activo con el mismo email
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM clientes WHERE email = :email AND eliminado = FALSE AND id != :id");
+    // 2. Verificar si ya existe otro cliente activo con el mismo email
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM clientes 
+        WHERE email = :email AND eliminado = FALSE AND id != :id
+    ");
     $stmt->execute([':email' => $cliente['email'], ':id' => $id]);
     $emailDuplicado = $stmt->fetchColumn();
     
@@ -75,7 +80,7 @@ try {
         exit;
     }
     
-    // RESTAURAR: Marcar como NO eliminado
+    // 3. RESTAURAR: Cambiar eliminado de TRUE a FALSE
     $stmt = $pdo->prepare("
         UPDATE clientes 
         SET 
@@ -91,11 +96,11 @@ try {
     
     if ($filasAfectadas === 0) {
         $pdo->rollBack();
-        header('Location: ' . url('pages/clientes/index.php?eliminados=1&error=') . urlencode('El cliente no pudo ser restaurado'));
+        header('Location: ' . url('pages/clientes/index.php?eliminados=1&error=') . urlencode('El cliente no pudo ser restaurado o ya fue restaurado'));
         exit;
     }
     
-    // Registrar en auditoría
+    // 4. Registrar en auditoría
     try {
         $stmt = $pdo->prepare("
             INSERT INTO auditoria (usuario_id, accion, descripcion, ip_usuario) 
@@ -113,22 +118,22 @@ try {
     
     $pdo->commit();
     
-    // Log del sistema
-    error_log("Cliente restaurado: ID {$id}, Nombre: {$cliente['nombre']}, Email: {$cliente['email']}, Usuario: " . ($_SESSION['username'] ?? 'unknown'));
+    // 5. Log del sistema
+    error_log("Cliente restaurado exitosamente: ID {$id}, Nombre: {$cliente['nombre']}, Email: {$cliente['email']}, Usuario: " . ($_SESSION['username'] ?? 'unknown'));
     
-    // Redirigir con mensaje de éxito
-    $mensaje = "Cliente '{$cliente['nombre']}' restaurado correctamente desde la papelera";
+    // 6. Redirigir con mensaje de éxito
+    $mensaje = "✅ Cliente '{$cliente['nombre']}' restaurado correctamente";
     header('Location: ' . url('pages/clientes/index.php?success=') . urlencode($mensaje));
     exit;
     
 } catch (PDOException $e) {
-    if (isset($pdo)) {
+    if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     
     error_log("Error en restauración de cliente: " . $e->getMessage());
     
-    $errorMsg = 'Error al restaurar cliente.';
+    $errorMsg = 'Error al restaurar cliente desde la base de datos.';
     
     // Verificar errores específicos
     if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
@@ -139,7 +144,7 @@ try {
     exit;
     
 } catch (Exception $e) {
-    if (isset($pdo)) {
+    if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     
