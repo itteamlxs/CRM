@@ -1,9 +1,9 @@
 <?php
 /**
- * Archivo: pages/clientes/restaurar.php - CORREGIDO
+ * Archivo: pages/clientes/restaurar.php - REPARADO
  * Función: Restaurar cliente eliminado (cambiar eliminado de TRUE a FALSE)
  * Seguridad: Solo admin puede restaurar, validación CSRF, auditoría
- * CORREGIDO: Simplificado - solo cambia eliminado=FALSE
+ * REPARADO: Mantener toda la seguridad original, solo simplificar la restauración
  */
 
 declare(strict_types=1);
@@ -41,15 +41,8 @@ $pdo = getPDO();
 try {
     $pdo->beginTransaction();
     
-    // 1. Verificar que el cliente existe y ESTÁ eliminado
-    $stmt = $pdo->prepare("
-        SELECT 
-            id, nombre, email, eliminado, fecha_eliminacion,
-            u.username as eliminado_por_usuario
-        FROM clientes c
-        LEFT JOIN usuarios u ON c.eliminado_por = u.id
-        WHERE c.id = :id
-    ");
+    // 1. Verificar que el cliente existe y ESTÁ eliminado (CONSULTA SIMPLIFICADA)
+    $stmt = $pdo->prepare("SELECT id, nombre, email, eliminado FROM clientes WHERE id = :id");
     $stmt->execute([':id' => $id]);
     $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -66,11 +59,7 @@ try {
     }
     
     // 2. Verificar si ya existe otro cliente activo con el mismo email
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) 
-        FROM clientes 
-        WHERE email = :email AND eliminado = FALSE AND id != :id
-    ");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM clientes WHERE email = :email AND eliminado = FALSE AND id != :id");
     $stmt->execute([':email' => $cliente['email'], ':id' => $id]);
     $emailDuplicado = $stmt->fetchColumn();
     
@@ -80,16 +69,8 @@ try {
         exit;
     }
     
-    // 3. RESTAURAR: Cambiar eliminado de TRUE a FALSE
-    $stmt = $pdo->prepare("
-        UPDATE clientes 
-        SET 
-            eliminado = FALSE,
-            fecha_eliminacion = NULL,
-            eliminado_por = NULL
-        WHERE id = :id AND eliminado = TRUE
-    ");
-    
+    // 3. RESTAURAR: Cambiar eliminado de TRUE a FALSE (SIMPLIFICADO)
+    $stmt = $pdo->prepare("UPDATE clientes SET eliminado = FALSE, fecha_eliminacion = NULL, eliminado_por = NULL WHERE id = :id AND eliminado = TRUE");
     $stmt->execute([':id' => $id]);
     
     $filasAfectadas = $stmt->rowCount();
@@ -100,15 +81,12 @@ try {
         exit;
     }
     
-    // 4. Registrar en auditoría
+    // 4. Registrar en auditoría (SIMPLIFICADO - sin JOIN)
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO auditoria (usuario_id, accion, descripcion, ip_usuario) 
-            VALUES (:user_id, 'cliente_restaurado', :descripcion, :ip)
-        ");
+        $stmt = $pdo->prepare("INSERT INTO auditoria (usuario_id, accion, descripcion, ip_usuario) VALUES (:user_id, 'cliente_restaurado', :descripcion, :ip)");
         $stmt->execute([
             ':user_id' => getUserId(),
-            ':descripcion' => "Cliente '{$cliente['nombre']}' ({$cliente['email']}) restaurado desde papelera (ID: {$id}). Eliminado el {$cliente['fecha_eliminacion']} por {$cliente['eliminado_por_usuario']}",
+            ':descripcion' => "Cliente '{$cliente['nombre']}' ({$cliente['email']}) restaurado desde papelera (ID: {$id})",
             ':ip' => $_SERVER['REMOTE_ADDR'] ?? null
         ]);
     } catch (PDOException $e) {
