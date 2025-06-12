@@ -96,7 +96,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <div>
                 <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
                     <?php if ($mostrar_eliminados): ?>
-                        📋 Clientes Eliminados
+                        Clientes Eliminados
                     <?php else: ?>
                         Lista de Clientes
                     <?php endif; ?>
@@ -151,7 +151,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <input
                         type="text"
                         id="busqueda-instantanea"
-                        placeholder="🔍 Buscar por nombre, email o teléfono..."
+                        placeholder="Buscar por nombre, email o teléfono..."
                         class="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         autocomplete="off"
                         spellcheck="false"
@@ -182,8 +182,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                     >
                         <option value="">Todos</option>
-                        <option value="activo">✅ Activos</option>
-                        <option value="inactivo">❌ Inactivos</option>
+                        <option value="activo">Activos</option>
+                        <option value="inactivo">Inactivos</option>
                     </select>
                 </div>
 

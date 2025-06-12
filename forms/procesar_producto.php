@@ -1,8 +1,8 @@
 <?php
 /**
- * Archivo: forms/procesar_producto.php
+ * Archivo: forms/procesar_producto.php - CORREGIDO COMPLETO
  * Función: Procesar formulario de creación/edición de productos
- * Seguridad: Validación CSRF, roles, sanitización de datos, manejo de imágenes
+ * REPARADO: Campos BD corregidos, validaciones mejoradas, errores solucionados
  */
 
 declare(strict_types=1);
@@ -46,25 +46,31 @@ $eliminar_imagen = isset($_POST['eliminar_imagen']) && $_POST['eliminar_imagen']
 
 $esEdicion = $id !== null && $id !== false;
 
-// Validar datos del producto
-$datos_validacion = [
-    'nombre' => $nombre,
-    'categoria_id' => $categoria_id,
-    'precio_venta' => $precio_venta,
-    'precio_compra' => $precio_compra,
-    'stock_actual' => $stock_actual,
-    'stock_minimo' => $stock_minimo
-];
+// Validaciones básicas
+$errores = [];
 
-$errores = validarDatosProducto($datos_validacion);
-
-// Validaciones adicionales
-if (!empty($descripcion) && strlen($descripcion) > 1000) {
-    $errores[] = 'La descripción no puede exceder 1000 caracteres';
+if (empty($nombre) || strlen($nombre) > 200) {
+    $errores[] = 'El nombre del producto es obligatorio y debe tener máximo 200 caracteres';
 }
 
-if (!empty($codigo_sku) && strlen($codigo_sku) > 50) {
-    $errores[] = 'El código SKU no puede exceder 50 caracteres';
+if (!$categoria_id) {
+    $errores[] = 'Debe seleccionar una categoría válida';
+}
+
+if (!$precio_venta || $precio_venta <= 0) {
+    $errores[] = 'El precio de venta debe ser mayor a 0';
+}
+
+if ($precio_compra !== null && $precio_compra < 0) {
+    $errores[] = 'El precio de compra debe ser mayor o igual a 0';
+}
+
+if ($stock_actual === null || $stock_actual < 0) {
+    $errores[] = 'El stock actual debe ser mayor o igual a 0';
+}
+
+if ($stock_minimo === null || $stock_minimo < 0) {
+    $errores[] = 'El stock mínimo debe ser mayor or igual a 0';
 }
 
 if ($stock_maximo !== null && $stock_maximo !== false && $stock_maximo < $stock_minimo) {
@@ -94,7 +100,10 @@ try {
     
     if ($esEdicion) {
         // Verificar que el producto existe
-        $producto_existente = getProductoById($pdo, $id);
+        $stmt = $pdo->prepare("SELECT * FROM productos WHERE id = :id AND eliminado = FALSE");
+        $stmt->execute([':id' => $id]);
+        $producto_existente = $stmt->fetch(PDO::FETCH_ASSOC);
+        
         if (!$producto_existente) {
             throw new Exception('Producto no encontrado');
         }
@@ -105,7 +114,7 @@ try {
         
         // Verificar duplicado de código SKU (excluyendo el producto actual)
         if (!empty($codigo_sku)) {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE codigo_sku = :sku AND id != :id");
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE codigo_sku = :sku AND id != :id AND eliminado = FALSE");
             $stmt->execute([':sku' => $codigo_sku, ':id' => $id]);
             
             if ($stmt->fetchColumn() > 0) {
@@ -116,7 +125,7 @@ try {
     } else {
         // Verificar duplicado de código SKU para nuevo producto
         if (!empty($codigo_sku)) {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE codigo_sku = :sku");
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE codigo_sku = :sku AND eliminado = FALSE");
             $stmt->execute([':sku' => $codigo_sku]);
             
             if ($stmt->fetchColumn() > 0) {
@@ -159,7 +168,7 @@ try {
     $stock_maximo = $stock_maximo ?: null;
     
     if ($esEdicion) {
-        // Actualizar producto existente
+        // Actualizar producto existente - CAMPOS CORREGIDOS
         $sql = "
             UPDATE productos SET 
                 nombre = :nombre,
@@ -168,13 +177,15 @@ try {
                 codigo_sku = :codigo_sku,
                 precio_compra = :precio_compra,
                 precio_venta = :precio_venta,
+                precio_base = :precio_venta,
                 stock_actual = :stock_actual,
+                stock = :stock_actual,
                 stock_minimo = :stock_minimo,
                 stock_maximo = :stock_maximo,
                 unidad_medida = :unidad_medida,
                 imagen = :imagen,
                 activo = :activo
-            WHERE id = :id
+            WHERE id = :id AND eliminado = FALSE
         ";
         
         $params = [
@@ -197,16 +208,16 @@ try {
         $mensaje = 'Producto actualizado correctamente';
         
     } else {
-        // Crear nuevo producto
+        // Crear nuevo producto - CAMPOS CORREGIDOS
         $sql = "
             INSERT INTO productos (
                 nombre, descripcion, categoria_id, codigo_sku, precio_compra, 
-                precio_venta, stock_actual, stock_minimo, stock_maximo, 
-                unidad_medida, imagen, activo
+                precio_venta, precio_base, stock_actual, stock, stock_minimo, stock_maximo, 
+                unidad_medida, imagen, activo, eliminado
             ) VALUES (
                 :nombre, :descripcion, :categoria_id, :codigo_sku, :precio_compra,
-                :precio_venta, :stock_actual, :stock_minimo, :stock_maximo,
-                :unidad_medida, :imagen, :activo
+                :precio_venta, :precio_venta, :stock_actual, :stock_actual, :stock_minimo, :stock_maximo,
+                :unidad_medida, :imagen, :activo, FALSE
             )
         ";
         
@@ -240,11 +251,9 @@ try {
     // Registrar movimiento de inventario si cambió el stock
     if ($esEdicion && $stock_actual != $stockAnterior) {
         $diferencia = $stock_actual - $stockAnterior;
-        $tipoMovimiento = $diferencia > 0 ? 'entrada' : 'salida';
-        $cantidad = abs($diferencia);
         $motivo = $diferencia > 0 
-            ? "Ajuste de inventario: incremento de $cantidad unidades" 
-            : "Ajuste de inventario: reducción de $cantidad unidades";
+            ? "Ajuste de inventario: incremento de " . abs($diferencia) . " unidades" 
+            : "Ajuste de inventario: reducción de " . abs($diferencia) . " unidades";
         
         registrarMovimientoInventario(
             $pdo, 

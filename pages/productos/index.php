@@ -1,7 +1,8 @@
 <?php
 /**
- * Archivo: pages/productos/index.php
- * Función: Lista de productos - CORREGIDO para mostrar todos los productos
+ * Archivo: pages/productos/index.php - CORREGIDO COMPLETO
+ * Función: Lista de productos - SIMPLIFICADO Y REPARADO
+ * CAMBIOS: Consulta simplificada, eliminadas referencias a campos complejos
  */
 
 declare(strict_types=1);
@@ -23,7 +24,7 @@ $per_page = 12;
 $offset = ($page - 1) * $per_page;
 
 // Construir condición WHERE
-$where_conditions = [];
+$where_conditions = ['p.eliminado = FALSE']; // Solo productos no eliminados
 $params = [];
 
 if ($search !== '') {
@@ -46,20 +47,17 @@ if ($estado_filter !== '') {
 
 if ($stock_filter !== '') {
     if ($stock_filter === 'sin_stock') {
-        $where_conditions[] = "COALESCE(p.stock_actual, COALESCE(p.stock, 0)) <= 0";
+        $where_conditions[] = "p.stock_actual <= 0";
     } elseif ($stock_filter === 'stock_bajo') {
-        $where_conditions[] = "COALESCE(p.stock_actual, COALESCE(p.stock, 0)) > 0 AND COALESCE(p.stock_actual, COALESCE(p.stock, 0)) <= COALESCE(p.stock_minimo, 0)";
+        $where_conditions[] = "p.stock_actual > 0 AND p.stock_actual <= p.stock_minimo";
     } elseif ($stock_filter === 'stock_normal') {
-        $where_conditions[] = "COALESCE(p.stock_actual, COALESCE(p.stock, 0)) > COALESCE(p.stock_minimo, 0)";
+        $where_conditions[] = "p.stock_actual > p.stock_minimo";
     }
 }
 
-$where_clause = '';
-if (!empty($where_conditions)) {
-    $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
-}
+$where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 
-// Contar total para paginación - CONSULTA COMPATIBLE
+// Contar total para paginación - CONSULTA SIMPLIFICADA
 $count_sql = "
     SELECT COUNT(*) 
     FROM productos p 
@@ -71,7 +69,7 @@ $count_stmt->execute($params);
 $total_rows = $count_stmt->fetchColumn();
 $total_pages = ceil($total_rows / $per_page);
 
-// Obtener productos - CONSULTA COMPATIBLE CON ESTRUCTURA ACTUAL
+// Obtener productos - CONSULTA SIMPLIFICADA Y LIMPIA
 $sql = "
     SELECT 
         p.id,
@@ -79,10 +77,10 @@ $sql = "
         p.descripcion,
         p.categoria_id,
         p.codigo_sku,
-        COALESCE(p.precio_compra, 0) as precio_compra,
-        COALESCE(p.precio_venta, p.precio_base, 0) as precio_venta,
-        COALESCE(p.stock_actual, p.stock, 0) as stock_actual,
-        COALESCE(p.stock_minimo, 0) as stock_minimo,
+        p.precio_compra,
+        p.precio_venta,
+        p.stock_actual,
+        p.stock_minimo,
         p.stock_maximo,
         p.unidad_medida,
         p.imagen,
@@ -90,11 +88,11 @@ $sql = "
         p.fecha_creacion,
         COALESCE(c.nombre, 'Sin categoría') as categoria_nombre,
         CASE 
-            WHEN COALESCE(p.stock_actual, p.stock, 0) <= 0 THEN 'sin_stock'
-            WHEN COALESCE(p.stock_actual, p.stock, 0) <= COALESCE(p.stock_minimo, 0) THEN 'stock_bajo'
+            WHEN p.stock_actual <= 0 THEN 'sin_stock'
+            WHEN p.stock_actual <= p.stock_minimo THEN 'stock_bajo'
             ELSE 'stock_normal'
         END as estado_stock,
-        (COALESCE(p.precio_venta, p.precio_base, 0) - COALESCE(p.precio_compra, 0)) as margen_ganancia
+        (p.precio_venta - p.precio_compra) as margen_ganancia
     FROM productos p 
     LEFT JOIN categorias c ON p.categoria_id = c.id 
     $where_clause
@@ -111,17 +109,21 @@ $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
 $stmt->execute();
 $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// DEBUG: Mostrar consulta si hay problemas
+// DEBUG: Solo mostrar si es admin y se solicita
 if (isset($_GET['debug']) && $_SESSION['role'] === 'admin') {
-    echo "<pre>SQL: $sql</pre>";
-    echo "<pre>Productos encontrados: " . count($productos) . "</pre>";
-    echo "<pre>Total en BD: $total_rows</pre>";
+    echo "<div style='background: #f0f0f0; padding: 10px; margin: 10px; border-radius: 5px;'>";
+    echo "<strong>DEBUG INFO:</strong><br>";
+    echo "SQL: <pre>" . htmlspecialchars($sql) . "</pre>";
+    echo "Productos encontrados: " . count($productos) . "<br>";
+    echo "Total en BD: $total_rows<br>";
+    echo "Parámetros: " . json_encode($params) . "<br>";
+    echo "</div>";
 }
 
-// Obtener categorías para filtro - COMPATIBLE
+// Obtener categorías para filtro
 $categorias = [];
 try {
-    $stmt = $pdo->prepare("SELECT id, nombre FROM categorias ORDER BY nombre ASC");
+    $stmt = $pdo->prepare("SELECT id, nombre FROM categorias WHERE activa = TRUE ORDER BY nombre ASC");
     $stmt->execute();
     $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -318,7 +320,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 con filtros aplicados
             <?php endif; ?>
             <?php if ($_SESSION['role'] === 'admin'): ?>
-                <a href="?debug=1" class="ml-4 text-blue-600 hover:text-blue-800">Debug</a>
+                <a href="?debug=1&<?php echo http_build_query(['search' => $search, 'categoria' => $categoria_filter, 'estado' => $estado_filter, 'stock' => $stock_filter]); ?>" class="ml-4 text-blue-600 hover:text-blue-800">Debug</a>
             <?php endif; ?>
         </div>
     </div>
